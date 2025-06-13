@@ -34,7 +34,7 @@ app = FastAPI(
     contact={
         "name": "BlueBin Development Team",
         "url": "https://github.com/bluebin",
-        "email": "dev@bluebin.com",
+        "email": "afif123bob@gmail.com",
     },
     openapi_tags=[{
         "name": "Route Optimization",
