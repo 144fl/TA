@@ -154,6 +154,10 @@ def get_traffic_data(origin, destination):
         }
     """
     try:
+        if not GOOGLE_MAPS_API_KEY:
+            print("Google Maps API key not found")
+            return {"duration": 0, "traffic_factor": 1, "traffic_level": "Light"}
+
         base_url = "https://maps.googleapis.com/maps/api/distancematrix/json"
         params = {
             "origins": f"{origin[0]},{origin[1]}",
@@ -163,24 +167,39 @@ def get_traffic_data(origin, destination):
         }
         
         response = requests.get(base_url, params=params)
+        if response.status_code != 200:
+            print(f"Error from Google Maps API: Status code {response.status_code}")
+            return {"duration": 0, "traffic_factor": 1, "traffic_level": "Light"}
+
         data = response.json()
         
-        if data["status"] == "OK":
-            element = data["rows"][0]["elements"][0]
-            duration_in_traffic = element.get("duration_in_traffic", {}).get("value", 0)
-            base_duration = element.get("duration", {}).get("value", 0)
-            
-            # Calculate traffic factor (how much slower than normal)
-            traffic_factor = duration_in_traffic / base_duration if base_duration > 0 else 1
-            
-            return {
-                "duration": duration_in_traffic,
-                "traffic_factor": traffic_factor,
-                "traffic_level": "Heavy" if traffic_factor > 1.5 else "Moderate" if traffic_factor > 1.2 else "Light"
-            }
+        if data.get("status") != "OK":
+            print(f"Google Maps API error: {data.get('status')}")
+            return {"duration": 0, "traffic_factor": 1, "traffic_level": "Light"}
+
+        if not data.get("rows") or not data["rows"][0].get("elements"):
+            print("No route data received from Google Maps API")
+            return {"duration": 0, "traffic_factor": 1, "traffic_level": "Light"}
+
+        element = data["rows"][0]["elements"][0]
+        if element.get("status") != "OK":
+            print(f"Route error: {element.get('status')}")
+            return {"duration": 0, "traffic_factor": 1, "traffic_level": "Light"}
+
+        duration_in_traffic = element.get("duration_in_traffic", {}).get("value", 0)
+        base_duration = element.get("duration", {}).get("value", 0)
+        
+        # Calculate traffic factor (how much slower than normal)
+        traffic_factor = duration_in_traffic / base_duration if base_duration > 0 else 1
+        
+        return {
+            "duration": duration_in_traffic,
+            "traffic_factor": traffic_factor,
+            "traffic_level": "Heavy" if traffic_factor > 1.5 else "Moderate" if traffic_factor > 1.2 else "Light"
+        }
     except Exception as e:
         print(f"Error getting traffic data: {e}")
-        return {"duration": 0, "traffic_factor": 1, "traffic_level": "Unknown"}
+        return {"duration": 0, "traffic_factor": 1, "traffic_level": "Light"}
 
 @app.post(
     "/optimize-route",
@@ -216,17 +235,29 @@ async def optimize_route(request: OptimizationRequest):
     Endpoint untuk mengoptimasi rute pengangkutan sampah
     """
     try:
+        # Validate request
+        if not request.tps_status:
+            raise ValueError("Minimal satu TPS harus diisi")
+
         # Update TPS status based on request
         tps_status = {item.tps_id: item.is_full for item in request.tps_status}
+        
+        # Validate TPS IDs
+        invalid_tps = [tps_id for tps_id in tps_status.keys() if tps_id not in LOCATIONS]
+        if invalid_tps:
+            raise ValueError(f"TPS ID tidak valid: {', '.join(invalid_tps)}")
         
         # Get traffic data if requested
         traffic_conditions = {}
         if request.consider_traffic:
-            for name1, coords1 in LOCATIONS.items():
-                for name2, coords2 in LOCATIONS.items():
-                    if name1 != name2:
-                        traffic_data = get_traffic_data(coords1, coords2)
-                        traffic_conditions[f"{name1}-{name2}"] = traffic_data["traffic_level"]
+            full_tps = [tps_id for tps_id, is_full in tps_status.items() if is_full]
+            relevant_locations = ["DEPO"] + full_tps + ["TPA_SARIMUKTI"]
+            
+            for i, name1 in enumerate(relevant_locations):
+                for name2 in relevant_locations[i+1:]:
+                    traffic_data = get_traffic_data(LOCATIONS[name1], LOCATIONS[name2])
+                    traffic_conditions[f"{name1}-{name2}"] = traffic_data["traffic_level"]
+                    traffic_conditions[f"{name2}-{name1}"] = traffic_data["traffic_level"]
 
         # Run optimization algorithm with traffic consideration
         route, total_distance, duration = genetic_algorithm(
@@ -234,6 +265,9 @@ async def optimize_route(request: OptimizationRequest):
             consider_traffic=request.consider_traffic,
             traffic_conditions=traffic_conditions
         )
+
+        if not route:
+            raise ValueError("Tidak ada TPS yang perlu dikunjungi atau tidak dapat menemukan rute yang valid")
 
         return RouteResponse(
             route=route,
