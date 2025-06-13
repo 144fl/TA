@@ -1,4 +1,5 @@
 fastapi
+matplotlib
 uvicorn
 pydantic
 requests
