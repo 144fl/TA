@@ -1,6 +1,7 @@
 fastapi
-matplotlib
 uvicorn
+matplotlib
+numpy
 pydantic
 requests
 python-dotenv
