@@ -9,3 +9,4 @@ typing-extensions
 firebase-admin
 geopy
 googlemaps
+email-validator
