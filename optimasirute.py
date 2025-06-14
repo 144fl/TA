@@ -7,7 +7,7 @@ from firebase_admin import credentials, db
 
 # --- Konfigurasi Lokasi ---
 LOCATIONS = {
-    "DEPO": (-6.914744, 107.609810),
+    "DEPO": (-6.890682913380755, 107.62539534137673),
     "TPS_DAGO": (-6.883993, 107.613144),
     "TPS_CIHAMPELAS": (-6.893537, 107.604953),
     "TPS_BUAHBATU": (-6.950251, 107.634587),
