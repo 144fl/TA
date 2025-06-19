@@ -7,6 +7,8 @@ import uvicorn
 from optimasirute import LOCATIONS, calculate_distance, genetic_algorithm
 from dotenv import load_dotenv
 import os
+import firebase_admin
+from firebase_admin import credentials, db
 
 app = FastAPI(
     title="Route Optimization API",
@@ -45,6 +47,13 @@ app = FastAPI(
 # Load environment variables
 load_dotenv()
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+
+# Firebase initialization
+cred = credentials.Certificate('bluebin-c7d9e-firebase-adminsdk-fbsvc-e5fcdc5d99.json')  # Ganti dengan path file service account JSON Anda
+firebase_admin.initialize_app(cred, {
+    'databaseURL': 'https://bluebin-c7d9e-default-rtdb.asia-southeast1.firebasedatabase.app/'
+})
+
 
 class TPSStatus(BaseModel):
     """
@@ -90,6 +99,7 @@ class RouteResponse(BaseModel):
     total_distance: float = 0.0
     estimated_duration: float = 0.0
     traffic_conditions: Dict[str, str] = {}
+    route_id: Optional[str] = None  # ID rute di Firebase
 
     model_config = {
         "json_schema_extra": {
@@ -201,6 +211,37 @@ def get_traffic_data(origin, destination):
         print(f"Error getting traffic data: {e}")
         return {"duration": 0, "traffic_factor": 1, "traffic_level": "Light"}
 
+# Initialize Firebase
+def init_firebase():
+    """Initialize Firebase if not already initialized"""
+    if not firebase_admin._apps:
+        cred = credentials.Certificate('bluebin-c7d9e-firebase-adminsdk-fbsvc-e5fcdc5d99.json')
+        firebase_admin.initialize_app(cred, {
+            'databaseURL': 'https://bluebin-c7d9e-default-rtdb.asia-southeast1.firebasedatabase.app/'
+        })
+
+def save_route_to_firebase(route_data: RouteResponse) -> str:
+    """Save route optimization results to Firebase"""
+    try:
+        init_firebase()
+        ref = db.reference('routes')
+        
+        # Create route entry with timestamp and metadata
+        route_entry = {
+            'timestamp': datetime.now().isoformat(),
+            'route': [dict(segment) for segment in route_data.route],
+            'total_distance': route_data.total_distance,
+            'estimated_duration': route_data.estimated_duration,
+            'traffic_conditions': route_data.traffic_conditions
+        }
+        
+        # Push data to Firebase
+        new_route_ref = ref.push(route_entry)
+        return new_route_ref.key
+    except Exception as e:
+        print(f"Error saving to Firebase: {e}")
+        return None
+
 @app.post(
     "/optimize-route",
     response_model=RouteResponse,
@@ -269,12 +310,25 @@ async def optimize_route(request: OptimizationRequest):
         if not route:
             raise ValueError("Tidak ada TPS yang perlu dikunjungi atau tidak dapat menemukan rute yang valid")
 
-        return RouteResponse(
+        # Save route to Firebase
+        save_route_to_firebase(RouteResponse(
+            route=route,
+            total_distance=total_distance,
+            estimated_duration=duration,
+            traffic_conditions=traffic_conditions
+        ))        # Create response object
+        route_response = RouteResponse(
             route=route,
             total_distance=total_distance,
             estimated_duration=duration,
             traffic_conditions=traffic_conditions
         )
+
+        # Save to Firebase and get route_id
+        route_id = save_route_to_firebase(route_response)
+        route_response.route_id = route_id
+
+        return route_response
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
