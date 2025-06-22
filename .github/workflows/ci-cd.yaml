@@ -134,6 +134,7 @@ jobs:
           # Set environment variables for the Cloud Run service
           env_vars: |
             GOOGLE_MAPS_API_KEY=AIzaSyCYok59aAi6EyI_zWGvm752mxRVTg7DuXk  # Ganti dengan API key yang Anda dapatkan dari Google Cloud Console
+            FIREBASE_KEY=${{secrets.FIREBASE_KEY}}  # Ganti dengan Firebase key yang Anda simpan sebagai secret di GitHub
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
