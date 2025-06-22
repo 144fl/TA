@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import random
+import os
 import math
 from geopy.distance import geodesic
 import firebase_admin
@@ -185,7 +186,7 @@ firebase_initialized = False
 def init_firebase():
     global firebase_initialized
     if not firebase_initialized:
-        cred = credentials.Certificate('bluebin-c7d9e-firebase-adminsdk-fbsvc-e5fcdc5d99.json')  # Ganti dengan path file service account JSON Anda
+        cred = credentials.Certificate(os.getenv('FIREBASE_KEY'))  # Ganti dengan path file service account JSON Anda
         firebase_admin.initialize_app(cred, {
             'databaseURL': 'https://bluebin-c7d9e-default-rtdb.asia-southeast1.firebasedatabase.app/'
         })
