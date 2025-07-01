@@ -116,6 +116,10 @@ async def optimize_route(data: TPSRequest):
     
     segments, total_km, total_time = genetic_algorithm(tps_dict)
 
+    final_route_names = [segment["from"] for segment in segments]
+    if segments:
+        final_route_names.append(segments[-1]["to"])  # pastikan TPA_SARIMUKTI masuk
+
     return {
         "segments": segments,
         "total_distance_km": total_km,
